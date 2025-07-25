@@ -27,7 +27,7 @@ export interface ScopeOfWorkResponse {
 
 export async function generateScopeOfWork(params: SowConsultancyRequest): Promise<ScopeOfWorkResponse | null> {
   try {
-    console.log("Calling SOW API with params:", params)
+    console.log("🚀 Starting SOW generation with params:", params)
 
     const response = await fetch("/api/generate-sow", {
       method: "POST",
@@ -37,19 +37,34 @@ export async function generateScopeOfWork(params: SowConsultancyRequest): Promis
       body: JSON.stringify(params),
     })
 
-    console.log("SOW API response status:", response.status)
+    console.log("📥 SOW API response status:", response.status)
+    console.log("📥 SOW API response headers:", Object.fromEntries(response.headers.entries()))
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ error: "Unknown error" }))
-      console.error("SOW API error:", errorData)
-      throw new Error(`API error: ${response.status} - ${errorData.error || "Unknown error"}`)
+      let errorData: any
+      try {
+        errorData = await response.json()
+        console.error("❌ SOW API error data:", errorData)
+      } catch {
+        const errorText = await response.text()
+        console.error("❌ SOW API error text:", errorText)
+        errorData = { error: errorText }
+      }
+
+      throw new Error(`API error: ${response.status} - ${errorData.error || errorData.details || "Unknown error"}`)
     }
 
     const data = await response.json()
-    console.log("SOW API response data:", data)
+    console.log("✅ SOW API response data received:", data)
     return data
   } catch (error) {
-    console.error("Error generating scope of work:", error)
-    return null
+    console.error("❌ Error generating scope of work:", error)
+
+    // Re-throw with more context
+    if (error instanceof Error) {
+      throw error
+    } else {
+      throw new Error("Unknown error occurred while generating scope of work")
+    }
   }
 }

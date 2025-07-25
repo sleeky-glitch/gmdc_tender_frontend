@@ -12,58 +12,121 @@ interface SowConsultancyRequest {
 
 export async function POST(request: NextRequest) {
   try {
-    console.log("SOW API route called")
+    console.log("=== SOW API Route Started ===")
 
-    const body: SowConsultancyRequest = await request.json()
-    console.log("Request body:", JSON.stringify(body, null, 2))
+    // Parse request body
+    let body: SowConsultancyRequest
+    try {
+      body = await request.json()
+      console.log("✅ Request body parsed successfully:", JSON.stringify(body, null, 2))
+    } catch (parseError) {
+      console.error("❌ Failed to parse request body:", parseError)
+      return NextResponse.json(
+        {
+          error: "Invalid JSON in request body",
+          details: parseError instanceof Error ? parseError.message : "Unknown parsing error",
+        },
+        { status: 400 },
+      )
+    }
 
-    // Use environment variable for API URL, fallback to the provided URL
+    // Get API URL
     const apiUrl = process.env.SOW_API_URL || "http://172.29.100.196:8000/api/SOW_consultancy"
-    console.log("API URL:", apiUrl)
+    console.log("🌐 Using API URL:", apiUrl)
+    console.log("🔧 Environment variable SOW_API_URL:", process.env.SOW_API_URL ? "SET" : "NOT SET")
 
-    // Call the external API
-    const response = await fetch(apiUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        accept: "application/json",
-      },
-      body: JSON.stringify(body),
-    })
+    // Make request to external API
+    console.log("📤 Making request to external API...")
+    let response: Response
+    try {
+      response = await fetch(apiUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          accept: "application/json",
+        },
+        body: JSON.stringify(body),
+      })
+      console.log("📥 External API response received. Status:", response.status)
+      console.log("📥 Response headers:", Object.fromEntries(response.headers.entries()))
+    } catch (fetchError) {
+      console.error("❌ Network error calling external API:", fetchError)
+      return NextResponse.json(
+        {
+          error: "Network error calling external API",
+          details: fetchError instanceof Error ? fetchError.message : "Unknown network error",
+          apiUrl: apiUrl,
+        },
+        { status: 502 },
+      )
+    }
 
-    console.log("External API response status:", response.status)
-
+    // Handle non-OK responses
     if (!response.ok) {
-      const errorText = await response.text()
-      console.error(`External API error: ${response.status} - ${errorText}`)
+      console.error(`❌ External API returned error status: ${response.status}`)
+
+      let errorText: string
+      let errorData: any = null
+
+      try {
+        errorText = await response.text()
+        console.log("📄 Raw error response:", errorText)
+
+        // Try to parse as JSON
+        try {
+          errorData = JSON.parse(errorText)
+          console.log("📋 Parsed error data:", errorData)
+        } catch {
+          console.log("📄 Error response is not JSON, using as text")
+        }
+      } catch (textError) {
+        console.error("❌ Failed to read error response:", textError)
+        errorText = "Failed to read error response"
+      }
 
       return NextResponse.json(
         {
           error: "External API error",
           status: response.status,
-          details: errorText,
+          statusText: response.statusText,
+          details: errorData || errorText,
+          apiUrl: apiUrl,
         },
         { status: response.status },
       )
     }
 
-    const data = await response.json()
-    console.log("External API response data:", JSON.stringify(data, null, 2))
+    // Parse successful response
+    let data: any
+    try {
+      data = await response.json()
+      console.log("✅ External API response parsed successfully")
+      console.log("📊 Response data keys:", Object.keys(data))
+    } catch (parseError) {
+      console.error("❌ Failed to parse successful response as JSON:", parseError)
+      const textResponse = await response.text()
+      console.log("📄 Raw response text:", textResponse)
 
+      return NextResponse.json(
+        {
+          error: "Invalid JSON response from external API",
+          details: parseError instanceof Error ? parseError.message : "Unknown parsing error",
+          rawResponse: textResponse,
+        },
+        { status: 502 },
+      )
+    }
+
+    console.log("✅ SOW API Route completed successfully")
     return NextResponse.json(data)
   } catch (error) {
-    console.error("Error in SOW API route:", error)
-
-    // More detailed error response
-    const errorMessage = error instanceof Error ? error.message : "Unknown error"
-    const errorStack = error instanceof Error ? error.stack : undefined
-
-    console.error("Error details:", { message: errorMessage, stack: errorStack })
+    console.error("❌ Unexpected error in SOW API route:", error)
+    console.error("❌ Error stack:", error instanceof Error ? error.stack : "No stack trace")
 
     return NextResponse.json(
       {
-        error: "Failed to generate scope of work",
-        details: errorMessage,
+        error: "Internal server error",
+        details: error instanceof Error ? error.message : "Unknown error",
         timestamp: new Date().toISOString(),
       },
       { status: 500 },
@@ -73,6 +136,7 @@ export async function POST(request: NextRequest) {
 
 // Add OPTIONS handler for CORS preflight requests
 export async function OPTIONS(request: NextRequest) {
+  console.log("🔧 CORS preflight request received")
   return new NextResponse(null, {
     status: 200,
     headers: {
