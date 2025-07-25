@@ -37,11 +37,11 @@ export interface ScopeOfWorkData {
 interface ScopeOfWorkFormProps {
   initialData?: ScopeOfWorkData | null
   onSave: (data: ScopeOfWorkData) => void
-  isEmbedded?: boolean // New prop to indicate if this form is embedded in another form
-  department?: string // Department for API
-  tenderTitle?: string // Tender title for API
-  contractDuration?: number // Contract duration for API
-  location?: string // Location for API
+  isEmbedded?: boolean
+  department?: string
+  tenderTitle?: string
+  contractDuration?: number
+  location?: string
 }
 
 const defaultFormData: ScopeOfWorkData = {
@@ -63,14 +63,10 @@ export function ScopeOfWorkForm({
   contractDuration = 12,
   location = "",
 }: ScopeOfWorkFormProps) {
-  // Initialize form data safely
   const [formData, setFormData] = useState<ScopeOfWorkData>(() => {
-    // If we have initialData, use that
     if (initialData) {
       return initialData
     }
-
-    // Otherwise create a new default with the tender title if available
     return {
       ...defaultFormData,
       projectTitle: tenderTitle || "",
@@ -81,7 +77,6 @@ export function ScopeOfWorkForm({
   const [apiError, setApiError] = useState<string | null>(null)
   const { toast } = useToast()
 
-  // Handle tender title changes - only update if project title is empty or matches previous tender title
   useEffect(() => {
     if (tenderTitle && (!formData.projectTitle || formData.projectTitle === tenderTitle)) {
       setFormData((prev) => ({
@@ -91,15 +86,12 @@ export function ScopeOfWorkForm({
     }
   }, [tenderTitle])
 
-  // Auto-save when form data changes, but with debounce to prevent excessive saves
   useEffect(() => {
     const timer = setTimeout(() => {
-      // Only save if we have some meaningful data
       if (formData.scopeOfWorkDetails || formData.projectTitle || formData.budget) {
         onSave(formData)
       }
-    }, 500) // 500ms debounce
-
+    }, 500)
     return () => clearTimeout(timer)
   }, [formData, onSave])
 
@@ -165,96 +157,54 @@ export function ScopeOfWorkForm({
     }
 
     setIsGenerating(true)
-    setApiError(null) // Clear any previous errors
+    setApiError(null)
 
     try {
-      console.log("🚀 Starting SOW generation for:", { department, tenderTitle, contractDuration, location })
-
       const response = await generateScopeOfWork({
         tenderTitle,
         departmentName: department,
         contractDuration,
         location,
-        projectType: "Consultancy", // Default value, could be made dynamic
-        budget: formData.budget || "", // Use budget from form
-        specialRequirements: formData.specialRequirements || "", // Use special requirements from form
+        projectType: "Consultancy",
+        budget: formData.budget || "",
+        specialRequirements: formData.specialRequirements || "",
       })
 
-      if (!response) {
-        throw new Error("No response received from API")
+      if (!response || !response.scopeOfWork) {
+        throw new Error("Invalid response from API")
       }
 
-      console.log("✅ Received SOW response:", response)
+      const sowData = response.scopeOfWork
 
-      // Handle deliverables - if empty or not provided, create default ones
-      let deliverables: DeliverableItem[] = []
-      if (response.deliverables && response.deliverables.length > 0) {
-        deliverables = response.deliverables
-      } else {
-        // Create default deliverables based on the scope of work details
-        deliverables = [
-          {
-            description: "Environmental Impact Assessment Report",
-            timeline: "T+3 months",
-          },
-          {
-            description: "Environment Clearance Application",
-            timeline: "T+4 months",
-          },
-          {
-            description: "Compliance and Support Documentation",
-            timeline: "T+6 months",
-          },
-        ]
-      }
+      // Use the API response data or fallback to defaults
+      const deliverables =
+        sowData.deliverables && sowData.deliverables.length > 0
+          ? sowData.deliverables
+          : [
+              { description: "Environmental Impact Assessment Report", timeline: "T+3 months" },
+              { description: "Environment Clearance Application", timeline: "T+4 months" },
+              { description: "Compliance and Support Documentation", timeline: "T+6 months" },
+            ]
 
-      // Handle extension deliverables - if empty or not provided, create default ones
-      let extensionDeliverables: ExtensionDeliverableItem[] = []
-      if (response.extensionDeliverables && response.extensionDeliverables.length > 0) {
-        extensionDeliverables = response.extensionDeliverables
-      } else {
-        // Create default extension deliverables
-        extensionDeliverables = [
-          {
-            description: "Extended compliance monitoring and support",
-            timeline: "T1+3 months",
-          },
-          {
-            description: "Additional regulatory assistance as required",
-            timeline: "T1+6 months",
-          },
-        ]
-      }
-
-      // Clean up the project title - remove "PROJECT TITLE:" prefix if present
-      let cleanProjectTitle = response.projectTitle || tenderTitle
-      if (cleanProjectTitle.includes("PROJECT TITLE:")) {
-        cleanProjectTitle = cleanProjectTitle
-          .replace(/PROJECT TITLE:\s*\n?/i, "")
-          .replace(/^["']|["']$/g, "") // Remove surrounding quotes
-          .trim()
-      }
-
-      // Clean up the scope of work details - remove "DETAILED" prefix if present
-      let cleanScopeDetails = response.scopeOfWorkDetails || ""
-      if (cleanScopeDetails.includes("DETAILED")) {
-        cleanScopeDetails = cleanScopeDetails.replace(/DETAILED\s*\n?/i, "").trim()
-      }
+      const extensionDeliverables =
+        sowData.extensionDeliverables && sowData.extensionDeliverables.length > 0
+          ? sowData.extensionDeliverables
+          : [
+              { description: "Extended compliance monitoring and support", timeline: "T1+3 months" },
+              { description: "Additional regulatory assistance as required", timeline: "T1+6 months" },
+            ]
 
       const updatedScopeOfWork: ScopeOfWorkData = {
-        projectTitle: cleanProjectTitle,
-        scopeOfWorkDetails: cleanScopeDetails,
+        projectTitle: sowData.projectTitle || tenderTitle,
+        scopeOfWorkDetails: sowData.scopeOfWorkDetails || "",
         deliverables,
-        extensionYear: response.extensionYear || "1",
+        extensionYear: sowData.extensionYear || "1",
         extensionDeliverables,
-        budget: response.budget || formData.budget || "",
-        specialRequirements: response.specialRequirements || formData.specialRequirements || "",
+        budget: formData.budget || "",
+        specialRequirements: formData.specialRequirements || "",
       }
 
-      console.log("✅ Processed SOW data:", updatedScopeOfWork)
-
       setFormData(updatedScopeOfWork)
-      // Explicitly save the generated scope of work
       onSave(updatedScopeOfWork)
 
       toast({
@@ -262,16 +212,8 @@ export function ScopeOfWorkForm({
         description: "Scope of work generated successfully with AI assistance.",
       })
     } catch (error) {
-      console.error("❌ Error generating scope of work:", error)
-
-      let errorMessage = "Failed to generate scope of work. Please try again."
-      if (error instanceof Error) {
-        errorMessage = error.message
-      }
-
-      // Set the error for display in the UI
+      const errorMessage = error instanceof Error ? error.message : "Failed to generate scope of work"
       setApiError(errorMessage)
-
       toast({
         title: "Error",
         description: errorMessage,
@@ -282,29 +224,23 @@ export function ScopeOfWorkForm({
     }
   }
 
-  // Extract the form content to be used with or without a form wrapper
   const formContent = (
     <Card>
       <CardHeader className="bg-[#4CAF50] text-white py-2 px-4">
         <CardTitle className="text-center">TERMS OF REFERENCE / SCOPE OF WORK</CardTitle>
       </CardHeader>
       <CardContent className="space-y-6 pt-6">
-        {/* Show API error if present */}
         {apiError && (
           <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>
-              <strong>API Connection Error:</strong> {apiError}
+              <strong>API Error:</strong> {apiError}
               <br />
-              <span className="text-sm mt-2 block">
-                You can still fill out the form manually. The AI generation feature will be available when the API
-                connection is restored.
-              </span>
+              <span className="text-sm mt-2 block">You can still fill out the form manually.</span>
             </AlertDescription>
           </Alert>
         )}
 
-        {/* Project Title - Centered and italicized */}
         <div className="space-y-2">
           <Label htmlFor="projectTitle">
             Project Title <span className="text-sm text-gray-500">(Pre-filled from RFP title)</span>
@@ -320,7 +256,6 @@ export function ScopeOfWorkForm({
 
         {formData.projectTitle && <div className="text-center italic mb-4">{formData.projectTitle}</div>}
 
-        {/* Budget and Special Requirements - Added these fields */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
           <div className="space-y-2">
             <Label htmlFor="budget">Budget</Label>
@@ -344,7 +279,6 @@ export function ScopeOfWorkForm({
           </div>
         </div>
 
-        {/* Generate button */}
         {department && tenderTitle && (
           <div className="flex justify-end mb-6">
             <Button
@@ -368,7 +302,6 @@ export function ScopeOfWorkForm({
           </div>
         )}
 
-        {/* Scope of Work Details */}
         <div className="space-y-2">
           <Label htmlFor="scopeOfWorkDetails" className="text-base font-bold">
             1. Scope of Work
@@ -382,7 +315,6 @@ export function ScopeOfWorkForm({
           />
         </div>
 
-        {/* Deliverables */}
         <div className="space-y-4">
           <div className="flex justify-between items-center">
             <Label className="text-base font-bold">2. Deliverables</Label>
@@ -444,7 +376,6 @@ export function ScopeOfWorkForm({
           </div>
         </div>
 
-        {/* Contract Extension */}
         <div className="space-y-4 mt-8">
           <div className="flex items-start space-x-2">
             <div className="text-sm">(i)</div>
@@ -527,12 +458,10 @@ export function ScopeOfWorkForm({
     </Card>
   )
 
-  // If embedded in another form, just return the content without a form wrapper
   if (isEmbedded) {
     return <div className="space-y-8">{formContent}</div>
   }
 
-  // Otherwise, wrap in a form element
   return (
     <form onSubmit={handleSubmit} className="space-y-8">
       {formContent}
