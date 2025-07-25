@@ -9,10 +9,9 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Plus, Trash2, Wand2, AlertCircle } from "lucide-react"
+import { Plus, Trash2, Wand2 } from "lucide-react"
 import { generateScopeOfWork } from "@/lib/sow-api"
 import { useToast } from "@/hooks/use-toast"
-import { Alert, AlertDescription } from "@/components/ui/alert"
 
 export interface DeliverableItem {
   description: string
@@ -74,7 +73,6 @@ export function ScopeOfWorkForm({
   })
 
   const [isGenerating, setIsGenerating] = useState(false)
-  const [apiError, setApiError] = useState<string | null>(null)
   const { toast } = useToast()
 
   useEffect(() => {
@@ -150,73 +148,79 @@ export function ScopeOfWorkForm({
     if (!department || !tenderTitle) {
       toast({
         title: "Missing information",
-        description: "Department and tender title are required to generate scope of work.",
+        description: "Department and tender title are required.",
         variant: "destructive",
       })
       return
     }
 
     setIsGenerating(true)
-    setApiError(null)
 
     try {
+      console.log("Making API call with:", {
+        tenderTitle,
+        departmentName: department,
+        contractDuration,
+        projectType: "Consultancy",
+        location,
+        budget: formData.budget || "₹50,00,000",
+        specialRequirements:
+          formData.specialRequirements ||
+          "Consultant must have experience with lignite mining environmental assessments and be familiar with Gujarat Pollution Control Board regulations. The consultant should have completed a",
+      })
+
       const response = await generateScopeOfWork({
         tenderTitle,
         departmentName: department,
         contractDuration,
-        location,
         projectType: "Consultancy",
-        budget: formData.budget || "",
-        specialRequirements: formData.specialRequirements || "",
+        location,
+        budget: formData.budget || "₹50,00,000",
+        specialRequirements:
+          formData.specialRequirements ||
+          "Consultant must have experience with lignite mining environmental assessments and be familiar with Gujarat Pollution Control Board regulations. The consultant should have completed a",
       })
 
-      if (!response || !response.scopeOfWork) {
-        throw new Error("Invalid response from API")
-      }
+      console.log("API Response:", response)
 
-      const sowData = response.scopeOfWork
+      // Extract data from the scopeOfWork object
+      const sowData = response.scopeOfWork || response
 
-      // Use the API response data or fallback to defaults
-      const deliverables =
-        sowData.deliverables && sowData.deliverables.length > 0
-          ? sowData.deliverables
-          : [
-              { description: "Environmental Impact Assessment Report", timeline: "T+3 months" },
-              { description: "Environment Clearance Application", timeline: "T+4 months" },
-              { description: "Compliance and Support Documentation", timeline: "T+6 months" },
-            ]
-
-      const extensionDeliverables =
-        sowData.extensionDeliverables && sowData.extensionDeliverables.length > 0
-          ? sowData.extensionDeliverables
-          : [
-              { description: "Extended compliance monitoring and support", timeline: "T1+3 months" },
-              { description: "Additional regulatory assistance as required", timeline: "T1+6 months" },
-            ]
-
-      const updatedScopeOfWork: ScopeOfWorkData = {
+      const updatedFormData: ScopeOfWorkData = {
         projectTitle: sowData.projectTitle || tenderTitle,
         scopeOfWorkDetails: sowData.scopeOfWorkDetails || "",
-        deliverables,
+        deliverables:
+          sowData.deliverables && sowData.deliverables.length > 0
+            ? sowData.deliverables
+            : [
+                { description: "Environmental Impact Assessment Report", timeline: "T+3 months" },
+                { description: "Environment Clearance Application", timeline: "T+4 months" },
+                { description: "Compliance and Support Documentation", timeline: "T+6 months" },
+              ],
         extensionYear: sowData.extensionYear || "1",
-        extensionDeliverables,
-        budget: formData.budget || "",
-        specialRequirements: formData.specialRequirements || "",
+        extensionDeliverables:
+          sowData.extensionDeliverables && sowData.extensionDeliverables.length > 0
+            ? sowData.extensionDeliverables
+            : [
+                { description: "Extended compliance monitoring and support", timeline: "T1+3 months" },
+                { description: "Additional regulatory assistance as required", timeline: "T1+6 months" },
+              ],
+        budget: formData.budget,
+        specialRequirements: formData.specialRequirements,
       }
 
-      setFormData(updatedScopeOfWork)
-      onSave(updatedScopeOfWork)
+      setFormData(updatedFormData)
+      onSave(updatedFormData)
 
       toast({
         title: "Success",
-        description: "Scope of work generated successfully with AI assistance.",
+        description: "Scope of work generated successfully!",
       })
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Failed to generate scope of work"
-      setApiError(errorMessage)
+      console.error("Error:", error)
       toast({
         title: "Error",
-        description: errorMessage,
+        description: "Failed to generate scope of work. Please try again.",
         variant: "destructive",
       })
     } finally {
@@ -230,17 +234,6 @@ export function ScopeOfWorkForm({
         <CardTitle className="text-center">TERMS OF REFERENCE / SCOPE OF WORK</CardTitle>
       </CardHeader>
       <CardContent className="space-y-6 pt-6">
-        {apiError && (
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>
-              <strong>API Error:</strong> {apiError}
-              <br />
-              <span className="text-sm mt-2 block">You can still fill out the form manually.</span>
-            </AlertDescription>
-          </Alert>
-        )}
-
         <div className="space-y-2">
           <Label htmlFor="projectTitle">
             Project Title <span className="text-sm text-gray-500">(Pre-filled from RFP title)</span>
