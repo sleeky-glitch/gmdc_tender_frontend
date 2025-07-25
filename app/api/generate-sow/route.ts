@@ -35,10 +35,13 @@ export async function POST(request: NextRequest) {
     console.log("🌐 Using API URL:", apiUrl)
     console.log("🔧 Environment variable SOW_API_URL:", process.env.SOW_API_URL ? "SET" : "NOT SET")
 
-    // Make request to external API
+    // Make request to external API with timeout
     console.log("📤 Making request to external API...")
     let response: Response
     try {
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 30000) // 30 second timeout
+
       response = await fetch(apiUrl, {
         method: "POST",
         headers: {
@@ -46,16 +49,42 @@ export async function POST(request: NextRequest) {
           accept: "application/json",
         },
         body: JSON.stringify(body),
+        signal: controller.signal,
       })
+
+      clearTimeout(timeoutId)
       console.log("📥 External API response received. Status:", response.status)
       console.log("📥 Response headers:", Object.fromEntries(response.headers.entries()))
     } catch (fetchError) {
       console.error("❌ Network error calling external API:", fetchError)
+
+      let errorMessage = "Network error calling external API"
+      let errorDetails = "Unknown network error"
+
+      if (fetchError instanceof Error) {
+        errorDetails = fetchError.message
+
+        if (fetchError.name === "AbortError") {
+          errorMessage = "Request timeout - external API took too long to respond"
+          errorDetails = "The external API did not respond within 30 seconds"
+        } else if (fetchError.message.includes("ECONNREFUSED")) {
+          errorMessage = "Connection refused - external API is not accessible"
+          errorDetails = "The external API server is not running or not accessible"
+        } else if (fetchError.message.includes("ENOTFOUND")) {
+          errorMessage = "DNS resolution failed - cannot find external API server"
+          errorDetails = "The external API server hostname could not be resolved"
+        } else if (fetchError.message.includes("ETIMEDOUT")) {
+          errorMessage = "Connection timeout - external API is not responding"
+          errorDetails = "The connection to the external API timed out"
+        }
+      }
+
       return NextResponse.json(
         {
-          error: "Network error calling external API",
-          details: fetchError instanceof Error ? fetchError.message : "Unknown network error",
+          error: errorMessage,
+          details: errorDetails,
           apiUrl: apiUrl,
+          timestamp: new Date().toISOString(),
         },
         { status: 502 },
       )
@@ -91,6 +120,7 @@ export async function POST(request: NextRequest) {
           statusText: response.statusText,
           details: errorData || errorText,
           apiUrl: apiUrl,
+          timestamp: new Date().toISOString(),
         },
         { status: response.status },
       )
@@ -117,8 +147,6 @@ export async function POST(request: NextRequest) {
     // Clean and validate the response
     const cleanedResponse = rawResponseText.trim()
     console.log("🧹 Cleaned response length:", cleanedResponse.length)
-    console.log("🔍 Response starts with:", cleanedResponse.substring(0, 10))
-    console.log("🔍 Response ends with:", cleanedResponse.substring(Math.max(0, cleanedResponse.length - 10)))
 
     // More flexible JSON detection
     const looksLikeJson =
@@ -132,7 +160,7 @@ export async function POST(request: NextRequest) {
         {
           error: "External API returned non-JSON response",
           details: "Response does not appear to be valid JSON",
-          rawResponse: rawResponseText.substring(0, 1000), // Limit to first 1000 chars
+          rawResponse: rawResponseText.substring(0, 1000),
           responseLength: rawResponseText.length,
         },
         { status: 502 },
@@ -144,31 +172,14 @@ export async function POST(request: NextRequest) {
       data = JSON.parse(cleanedResponse)
       console.log("✅ External API response parsed successfully")
       console.log("📊 Response data keys:", Object.keys(data))
-      console.log("📊 Response data structure:", JSON.stringify(data, null, 2).substring(0, 500))
     } catch (parseError) {
       console.error("❌ Failed to parse successful response as JSON:", parseError)
       console.log("📄 Raw response that failed to parse:", cleanedResponse.substring(0, 500))
 
-      // Try to identify the issue
-      let errorDetails = "Unknown parsing error"
-      if (parseError instanceof Error) {
-        errorDetails = parseError.message
-
-        // Check for common JSON issues
-        if (errorDetails.includes("Unexpected token")) {
-          const match = errorDetails.match(/position (\d+)/)
-          if (match) {
-            const position = Number.parseInt(match[1])
-            const context = cleanedResponse.substring(Math.max(0, position - 50), position + 50)
-            errorDetails += `. Context around error: "${context}"`
-          }
-        }
-      }
-
       return NextResponse.json(
         {
           error: "Invalid JSON response from external API",
-          details: errorDetails,
+          details: parseError instanceof Error ? parseError.message : "Unknown parsing error",
           rawResponse: cleanedResponse.substring(0, 1000),
           responseLength: cleanedResponse.length,
         },

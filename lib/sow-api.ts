@@ -58,12 +58,11 @@ export async function generateScopeOfWork(params: SowConsultancyRequest): Promis
             errorMessage = errorData.details
           }
 
-          // If it's a non-JSON response error, provide more context
-          if (errorData.error === "External API returned non-JSON response") {
-            errorMessage = `API returned invalid response format. Response length: ${errorData.responseLength || "unknown"}`
-            if (errorData.rawResponse) {
-              console.error("📄 Raw response preview:", errorData.rawResponse.substring(0, 200))
-            }
+          // Provide more specific error messages based on the error type
+          if (errorData.error === "Network error calling external API") {
+            errorMessage = `Cannot connect to external API: ${errorData.details}`
+          } else if (errorData.error === "External API error") {
+            errorMessage = `External API returned error ${errorData.status}: ${errorData.details}`
           }
         } catch {
           // If not JSON, use the text as error message

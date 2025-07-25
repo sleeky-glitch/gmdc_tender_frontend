@@ -9,9 +9,10 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Plus, Trash2, Wand2 } from "lucide-react"
+import { Plus, Trash2, Wand2, AlertCircle } from "lucide-react"
 import { generateScopeOfWork } from "@/lib/sow-api"
 import { useToast } from "@/hooks/use-toast"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 
 export interface DeliverableItem {
   description: string
@@ -77,6 +78,7 @@ export function ScopeOfWorkForm({
   })
 
   const [isGenerating, setIsGenerating] = useState(false)
+  const [apiError, setApiError] = useState<string | null>(null)
   const { toast } = useToast()
 
   // Handle tender title changes - only update if project title is empty or matches previous tender title
@@ -163,6 +165,7 @@ export function ScopeOfWorkForm({
     }
 
     setIsGenerating(true)
+    setApiError(null) // Clear any previous errors
 
     try {
       console.log("🚀 Starting SOW generation for:", { department, tenderTitle, contractDuration, location })
@@ -266,6 +269,9 @@ export function ScopeOfWorkForm({
         errorMessage = error.message
       }
 
+      // Set the error for display in the UI
+      setApiError(errorMessage)
+
       toast({
         title: "Error",
         description: errorMessage,
@@ -283,6 +289,21 @@ export function ScopeOfWorkForm({
         <CardTitle className="text-center">TERMS OF REFERENCE / SCOPE OF WORK</CardTitle>
       </CardHeader>
       <CardContent className="space-y-6 pt-6">
+        {/* Show API error if present */}
+        {apiError && (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              <strong>API Connection Error:</strong> {apiError}
+              <br />
+              <span className="text-sm mt-2 block">
+                You can still fill out the form manually. The AI generation feature will be available when the API
+                connection is restored.
+              </span>
+            </AlertDescription>
+          </Alert>
+        )}
+
         {/* Project Title - Centered and italicized */}
         <div className="space-y-2">
           <Label htmlFor="projectTitle">
