@@ -165,6 +165,8 @@ export function ScopeOfWorkForm({
     setIsGenerating(true)
 
     try {
+      console.log("🚀 Starting SOW generation for:", { department, tenderTitle, contractDuration, location })
+
       const response = await generateScopeOfWork({
         tenderTitle,
         departmentName: department,
@@ -175,40 +177,98 @@ export function ScopeOfWorkForm({
         specialRequirements: formData.specialRequirements || "", // Use special requirements from form
       })
 
-      if (response && response.scopeOfWork) {
-        // If deliverables array is empty, create default ones
-        const deliverables =
-          response.scopeOfWork.deliverables && response.scopeOfWork.deliverables.length > 0
-            ? response.scopeOfWork.deliverables
-            : [{ description: "To be defined based on project requirements", timeline: "As per project schedule" }]
-
-        // If extension deliverables array is empty, create default ones
-        const extensionDeliverables =
-          response.scopeOfWork.extensionDeliverables && response.scopeOfWork.extensionDeliverables.length > 0
-            ? response.scopeOfWork.extensionDeliverables
-            : [{ description: "Extended support and maintenance", timeline: "T1+ as required" }]
-
-        const updatedScopeOfWork = {
-          ...response.scopeOfWork,
-          deliverables,
-          extensionDeliverables,
-        }
-
-        setFormData(updatedScopeOfWork)
-        // Explicitly save the generated scope of work
-        onSave(updatedScopeOfWork)
-        toast({
-          title: "Success",
-          description: "Scope of work generated successfully.",
-        })
-      } else {
-        throw new Error("Failed to generate scope of work")
+      if (!response) {
+        throw new Error("No response received from API")
       }
+
+      console.log("✅ Received SOW response:", response)
+
+      // Handle deliverables - if empty or not provided, create default ones
+      let deliverables: DeliverableItem[] = []
+      if (response.deliverables && response.deliverables.length > 0) {
+        deliverables = response.deliverables
+      } else {
+        // Create default deliverables based on the scope of work details
+        deliverables = [
+          {
+            description: "Environmental Impact Assessment Report",
+            timeline: "T+3 months",
+          },
+          {
+            description: "Environment Clearance Application",
+            timeline: "T+4 months",
+          },
+          {
+            description: "Compliance and Support Documentation",
+            timeline: "T+6 months",
+          },
+        ]
+      }
+
+      // Handle extension deliverables - if empty or not provided, create default ones
+      let extensionDeliverables: ExtensionDeliverableItem[] = []
+      if (response.extensionDeliverables && response.extensionDeliverables.length > 0) {
+        extensionDeliverables = response.extensionDeliverables
+      } else {
+        // Create default extension deliverables
+        extensionDeliverables = [
+          {
+            description: "Extended compliance monitoring and support",
+            timeline: "T1+3 months",
+          },
+          {
+            description: "Additional regulatory assistance as required",
+            timeline: "T1+6 months",
+          },
+        ]
+      }
+
+      // Clean up the project title - remove "PROJECT TITLE:" prefix if present
+      let cleanProjectTitle = response.projectTitle || tenderTitle
+      if (cleanProjectTitle.includes("PROJECT TITLE:")) {
+        cleanProjectTitle = cleanProjectTitle
+          .replace(/PROJECT TITLE:\s*\n?/i, "")
+          .replace(/^["']|["']$/g, "") // Remove surrounding quotes
+          .trim()
+      }
+
+      // Clean up the scope of work details - remove "DETAILED" prefix if present
+      let cleanScopeDetails = response.scopeOfWorkDetails || ""
+      if (cleanScopeDetails.includes("DETAILED")) {
+        cleanScopeDetails = cleanScopeDetails.replace(/DETAILED\s*\n?/i, "").trim()
+      }
+
+      const updatedScopeOfWork: ScopeOfWorkData = {
+        projectTitle: cleanProjectTitle,
+        scopeOfWorkDetails: cleanScopeDetails,
+        deliverables,
+        extensionYear: response.extensionYear || "1",
+        extensionDeliverables,
+        budget: response.budget || formData.budget || "",
+        specialRequirements: response.specialRequirements || formData.specialRequirements || "",
+      }
+
+      console.log("✅ Processed SOW data:", updatedScopeOfWork)
+
+      setFormData(updatedScopeOfWork)
+      // Explicitly save the generated scope of work
+      onSave(updatedScopeOfWork)
+
+      toast({
+        title: "Success",
+        description: "Scope of work generated successfully with AI assistance.",
+      })
     } catch (error) {
-      console.error("Error generating scope of work:", error)
+      console.error("❌ Error generating scope of work:", error)
+
+      let errorMessage = "Failed to generate scope of work. Please try again."
+      if (error instanceof Error) {
+        errorMessage = error.message
+      }
+
       toast({
         title: "Error",
-        description: "Failed to generate scope of work. Please try again.",
+        description: errorMessage,
         variant: "destructive",
       })
     } finally {

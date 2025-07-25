@@ -97,21 +97,80 @@ export async function POST(request: NextRequest) {
     }
 
     // Parse successful response
+    let rawResponseText: string
+    try {
+      rawResponseText = await response.text()
+      console.log("📄 Raw successful response text length:", rawResponseText.length)
+      console.log("🔤 First 500 characters:", rawResponseText.substring(0, 500))
+      console.log("🔤 Last 100 characters:", rawResponseText.substring(Math.max(0, rawResponseText.length - 100)))
+    } catch (textError) {
+      console.error("❌ Failed to read response as text:", textError)
+      return NextResponse.json(
+        {
+          error: "Failed to read response from external API",
+          details: textError instanceof Error ? textError.message : "Unknown error",
+        },
+        { status: 502 },
+      )
+    }
+
+    // Clean and validate the response
+    const cleanedResponse = rawResponseText.trim()
+    console.log("🧹 Cleaned response length:", cleanedResponse.length)
+    console.log("🔍 Response starts with:", cleanedResponse.substring(0, 10))
+    console.log("🔍 Response ends with:", cleanedResponse.substring(Math.max(0, cleanedResponse.length - 10)))
+
+    // More flexible JSON detection
+    const looksLikeJson =
+      (cleanedResponse.startsWith("{") && cleanedResponse.endsWith("}")) ||
+      (cleanedResponse.startsWith("[") && cleanedResponse.endsWith("]"))
+
+    if (!looksLikeJson) {
+      console.error("❌ Response doesn't appear to be JSON")
+      console.error("📄 Full response:", rawResponseText)
+      return NextResponse.json(
+        {
+          error: "External API returned non-JSON response",
+          details: "Response does not appear to be valid JSON",
+          rawResponse: rawResponseText.substring(0, 1000), // Limit to first 1000 chars
+          responseLength: rawResponseText.length,
+        },
+        { status: 502 },
+      )
+    }
+
     let data: any
     try {
-      data = await response.json()
+      data = JSON.parse(cleanedResponse)
       console.log("✅ External API response parsed successfully")
       console.log("📊 Response data keys:", Object.keys(data))
+      console.log("📊 Response data structure:", JSON.stringify(data, null, 2).substring(0, 500))
     } catch (parseError) {
       console.error("❌ Failed to parse successful response as JSON:", parseError)
-      const textResponse = await response.text()
-      console.log("📄 Raw response text:", textResponse)
+      console.log("📄 Raw response that failed to parse:", cleanedResponse.substring(0, 500))
+
+      // Try to identify the issue
+      let errorDetails = "Unknown parsing error"
+      if (parseError instanceof Error) {
+        errorDetails = parseError.message
+
+        // Check for common JSON issues
+        if (errorDetails.includes("Unexpected token")) {
+          const match = errorDetails.match(/position (\d+)/)
+          if (match) {
+            const position = Number.parseInt(match[1])
+            const context = cleanedResponse.substring(Math.max(0, position - 50), position + 50)
+            errorDetails += `. Context around error: "${context}"`
+          }
+        }
+      }
 
       return NextResponse.json(
         {
           error: "Invalid JSON response from external API",
-          details: parseError instanceof Error ? parseError.message : "Unknown parsing error",
-          rawResponse: textResponse,
+          details: errorDetails,
+          rawResponse: cleanedResponse.substring(0, 1000),
+          responseLength: cleanedResponse.length,
         },
         { status: 502 },
       )

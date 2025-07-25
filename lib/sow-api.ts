@@ -14,15 +14,14 @@ export interface DeliverableItem {
 }
 
 export interface ScopeOfWorkResponse {
-  scopeOfWork: {
-    projectTitle: string
-    scopeOfWorkDetails: string
-    deliverables: DeliverableItem[]
-    extensionYear: string
-    extensionDeliverables: DeliverableItem[]
-    budget?: string
-    specialRequirements?: string
-  }
+  scopeOfWork: string
+  projectTitle: string
+  scopeOfWorkDetails: string
+  deliverables: DeliverableItem[]
+  extensionYear: string
+  extensionDeliverables: DeliverableItem[]
+  budget?: string
+  specialRequirements?: string
 }
 
 export async function generateScopeOfWork(params: SowConsultancyRequest): Promise<ScopeOfWorkResponse | null> {
@@ -42,20 +41,69 @@ export async function generateScopeOfWork(params: SowConsultancyRequest): Promis
 
     if (!response.ok) {
       let errorData: any
+      let errorMessage = `HTTP ${response.status}: ${response.statusText}`
+
       try {
-        errorData = await response.json()
-        console.error("❌ SOW API error data:", errorData)
-      } catch {
         const errorText = await response.text()
-        console.error("❌ SOW API error text:", errorText)
-        errorData = { error: errorText }
+        console.error("❌ SOW API error response text:", errorText)
+
+        try {
+          errorData = JSON.parse(errorText)
+          console.error("❌ SOW API error data:", errorData)
+
+          // Extract the most relevant error message
+          if (errorData.error) {
+            errorMessage = errorData.error
+          } else if (errorData.details) {
+            errorMessage = errorData.details
+          }
+
+          // If it's a non-JSON response error, provide more context
+          if (errorData.error === "External API returned non-JSON response") {
+            errorMessage = `API returned invalid response format. Response length: ${errorData.responseLength || "unknown"}`
+            if (errorData.rawResponse) {
+              console.error("📄 Raw response preview:", errorData.rawResponse.substring(0, 200))
+            }
+          }
+        } catch {
+          // If not JSON, use the text as error message
+          errorMessage = errorText || errorMessage
+        }
+      } catch {
+        console.error("❌ Failed to read error response")
       }
 
-      throw new Error(`API error: ${response.status} - ${errorData.error || errorData.details || "Unknown error"}`)
+      throw new Error(errorMessage)
     }
 
-    const data = await response.json()
-    console.log("✅ SOW API response data received:", data)
+    let responseText: string
+    try {
+      responseText = await response.text()
+      console.log("📄 Client received response text length:", responseText.length)
+    } catch (textError) {
+      console.error("❌ Failed to read response text:", textError)
+      throw new Error("Failed to read response from server")
+    }
+
+    // Clean the response
+    const cleanedResponse = responseText.trim()
+
+    // Validate response looks like JSON
+    if (!cleanedResponse.startsWith("{") && !cleanedResponse.startsWith("[")) {
+      console.error("❌ Client: Response is not JSON:", cleanedResponse.substring(0, 200))
+      throw new Error("Server returned invalid response format")
+    }
+
+    let data: ScopeOfWorkResponse
+    try {
+      data = JSON.parse(cleanedResponse)
+      console.log("✅ SOW API response data received:", data)
+    } catch (parseError) {
+      console.error("❌ Client: Failed to parse JSON response:", parseError)
+      console.error("❌ Raw response that failed:", cleanedResponse.substring(0, 500))
+      throw new Error("Server returned invalid JSON response")
+    }
+
     return data
   } catch (error) {
     console.error("❌ Error generating scope of work:", error)
