@@ -176,9 +176,27 @@ export function ScopeOfWorkForm({
       })
 
       if (response && response.scopeOfWork) {
-        setFormData(response.scopeOfWork)
+        // If deliverables array is empty, create default ones
+        const deliverables =
+          response.scopeOfWork.deliverables && response.scopeOfWork.deliverables.length > 0
+            ? response.scopeOfWork.deliverables
+            : [{ description: "To be defined based on project requirements", timeline: "As per project schedule" }]
+
+        // If extension deliverables array is empty, create default ones
+        const extensionDeliverables =
+          response.scopeOfWork.extensionDeliverables && response.scopeOfWork.extensionDeliverables.length > 0
+            ? response.scopeOfWork.extensionDeliverables
+            : [{ description: "Extended support and maintenance", timeline: "T1+ as required" }]
+
+        const updatedScopeOfWork = {
+          ...response.scopeOfWork,
+          deliverables,
+          extensionDeliverables,
+        }
+
+        setFormData(updatedScopeOfWork)
         // Explicitly save the generated scope of work
-        onSave(response.scopeOfWork)
+        onSave(updatedScopeOfWork)
         toast({
           title: "Success",
           description: "Scope of work generated successfully.",
@@ -292,7 +310,7 @@ export function ScopeOfWorkForm({
               variant="outline"
               size="sm"
               onClick={addDeliverable}
-              className="border-[#4CAF50] text-[#4CAF50] hover:bg-[#4CAF50] hover:text-white"
+              className="border-[#4CAF50] text-[#4CAF50] hover:bg-[#4CAF50] hover:text-white bg-transparent"
             >
               <Plus className="h-4 w-4 mr-1" /> Add Deliverable
             </Button>
@@ -369,7 +387,7 @@ export function ScopeOfWorkForm({
               variant="outline"
               size="sm"
               onClick={addExtensionDeliverable}
-              className="border-[#4CAF50] text-[#4CAF50] hover:bg-[#4CAF50] hover:text-white"
+              className="border-[#4CAF50] text-[#4CAF50] hover:bg-[#4CAF50] hover:text-white bg-transparent"
             >
               <Plus className="h-4 w-4 mr-1" /> Add Deliverable
             </Button>

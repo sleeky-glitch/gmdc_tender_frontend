@@ -27,7 +27,7 @@ export interface ScopeOfWorkResponse {
 
 export async function generateScopeOfWork(params: SowConsultancyRequest): Promise<ScopeOfWorkResponse | null> {
   try {
-    const response = await fetch("http://localhost:8000/api/SOW_consultancy", {
+    const response = await fetch("/api/generate-sow", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
